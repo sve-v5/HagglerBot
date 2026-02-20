@@ -1,85 +1,86 @@
 import streamlit as st
 import random
 
-st.set_page_config(page_title="HagglerBot v5.2 | Smart UK", page_icon="🎩")
+st.set_page_config(page_title="HagglerBot v5.3 | Negotiation Engine", page_icon="🎩")
 
-# --- PERSONA ENGINE WITH INTELLECTUAL & ABSURD HUMOUR ---
-STRATEGIES = {
-    "SELLER": {
+# --- CONTEXT-AWARE RESPONSE ENGINE ---
+def get_seller_response(persona, current_offer, prev_offer, target_price):
+    # Dynamic logic for price improvement
+    is_improving = prev_offer is not None and current_offer > prev_offer
+    
+    responses = {
         "⚖️ The Stoic": {
-            "floor_mult": 0.80, # Full price - 20%
-            "responses": [
-                "I have contemplated your offer. It is as hollow as a drum. Let us return to reality.",
-                "Entropy increases, but my price remains relatively stable. £{p} is the compromise.",
-                "Your offer is a fascinating exercise in optimism. However, logic dictates £{p}.",
-                "I am indifferent to the sale, but committed to the value. £{p} is the floor."
-            ]
-        },
-        "✨ Gen-Z Slay": {
-            "floor_mult": 0.70,
-            "responses": [
-                "This offer isn't giving what you think it's giving. Major L. Let's try £{p}?",
-                "I'm literally obsessed with this item, so parting with it for less than £{p} is a hate crime.",
-                "Your offer is giving 'delusional era'. Bestie, £{p} is the lowest I'll go.",
-                "Main character energy requires a main character price. £{p} or keep scrolling."
-            ]
+            "standard": f"Logic dictates £{target_price:.2f}. Your offer is merely a suggestion.",
+            "improving": "I see we are starting to hit the ground running with reality. Still, we need to reach £{p}.",
+            "insult": "Entropy increases, but my patience for lowballs does not."
         },
         "🎭 The Absurdist": {
-            "floor_mult": 0.85,
-            "responses": [
-                "I would accept that, but my pet lobster says the economy is too fragile. £{p}?",
-                "If I sell it for your price, the ghosts of Victorian orphans will haunt me. £{p} is safer.",
-                "Money is a social construct, but unfortunately, my landlord is a constructivist. £{p} please.",
-                "I'll accept your offer if you can prove the moon isn't made of low-quality cheddar. No? Then £{p}."
-            ]
+            "standard": f"My pet lobster is unimpressed. He demands £{target_price:.2f}.",
+            "improving": "It's taking shape, even if slowly—like a glacier with a bank account. Let's aim for £{p}.",
+            "insult": "I would rather trade this for a single, very high-quality cloud."
+        },
+        "✨ Gen-Z Slay": {
+            "standard": f"Main character energy requires a main character price. £{target_price:.2f}?",
+            "improving": "Wait, this offer is actually starting to slay. We're getting on the right track! £{p}?",
+            "insult": "This offer is giving 'delusional era'. Major L."
         }
     }
-}
+    
+    char = responses[persona]
+    if is_improving:
+        return char["improving"].format(p=f"{target_price:.2f}")
+    elif current_offer < (target_price * 0.7):
+        return char["insult"]
+    else:
+        return char["standard"]
 
 # --- UI ---
-st.title("🎩 HagglerBot v5.2")
-st.markdown("*Intellectual negotiation for the discerning Vinted user.*")
+st.title("🎩 HagglerBot v5.3")
 
-mode = st.sidebar.toggle("Switch to Buyer Mode", value=False) # Simple toggle for now
+tab1, tab2 = st.tabs(["Selling Mode", "Buying Mode"])
 
-if not mode: # SELLING MODE
-    st.header("Seller Interface")
-    
+with tab1:
+    st.header("Counter-Offer Engine")
     col1, col2 = st.columns(2)
     with col1:
-        listed_price = st.number_input("Your Listed Price (£):", min_value=1.0, value=50.0)
+        listed_p = st.number_input("Listed Price (£):", value=50.0, key="s_listed")
+        prev_o = st.number_input("Previous Offer (£) (Optional):", value=0.0, key="s_prev")
     with col2:
-        buyer_offer = st.number_input("Buyer's Low Offer (£):", min_value=1.0, value=30.0)
-    
-    category = st.selectbox("Product Category:", ["Clothes", "Tech", "Books", "Collectibles"])
-    persona_name = st.selectbox("Select Your Response Style:", list(STRATEGIES["SELLER"].keys()))
-    
-    # Logic
-    config = STRATEGIES["SELLER"][persona_name]
-    suggested_price = listed_price * config["floor_mult"]
-    
-    # Psych-rounding (ending in .95 or .50)
-    final_price = round(suggested_price) - 0.05 if suggested_price % 1 > 0.5 else round(suggested_price) + 0.50
+        current_o = st.number_input("Current Offer (£):", value=30.0, key="s_curr")
+        s_persona = st.selectbox("Your Style:", ["⚖️ The Stoic", "🎭 The Absurdist", "✨ Gen-Z Slay"])
 
-    if st.button("Generate Intellectual Clapback"):
-        quote_template = random.choice(config["responses"])
-        final_quote = quote_template.format(p=f"{final_price:.2f}")
-        
-        st.divider()
-        st.subheader("The Counter-Attack:")
-        
-        # Display the witty response
-        st.info(f"**{persona_name} logic:** \n\n '{final_quote}'")
-        
-        st.write("### 📋 Copy to Chat:")
-        st.code(f"Look, {final_quote}", language=None)
-        
-        if buyer_offer < (listed_price * 0.5):
-            st.warning("⚠️ Note: This buyer is a 'Lowballer'. The response has been sharpened accordingly.")
+    # Seller Logic: Floor is Listed - 20%
+    target = listed_p * 0.8
+    if st.button("Generate Response", key="s_btn"):
+        prev_val = prev_o if prev_o > 0 else None
+        reply = get_seller_response(s_persona, current_o, prev_val, target)
+        st.info(f"**Response:** {reply}")
+        st.code(f"Look, {reply}", language=None)
 
-else:
-    st.header("Buyer Interface")
-    st.write("Buyer mode logic updated to match intellectual standards in v5.3.")
+with tab2:
+    st.header("Strategic Buyer")
+    colA, colB = st.columns(2)
+    with colA:
+        item_p = st.number_input("Item Price (£):", value=100.0, key="b_price")
+        b_persona = st.selectbox("Buyer Persona:", ["🧐 The Reluctant Aristocrat", "📉 The Cold Analyst", "🔥 The Hype Beast"])
+    with colB:
+        category = st.selectbox("Category:", ["Luxury", "Tech", "Vintage", "Books"])
 
-# --- FOOTER ---
-st.caption("v5.2 | Now with 100% more sarcasm and 0% 'bruv'.")
+    if st.button("Generate Opening Bid"):
+        # Buyer Logic: Bid starts at 70-80%
+        bid_map = {"🧐 The Reluctant Aristocrat": 0.85, "📉 The Cold Analyst": 0.75, "🔥 The Hype Beast": 0.80}
+        bid = item_p * bid_map[b_persona]
+        
+        quotes = {
+            "🧐 The Reluctant Aristocrat": "In this economy, one must be prudent. Would you consider £{p} for this charming piece?",
+            "📉 The Cold Analyst": "Market data suggests an overvaluation. My algorithmic offer is £{p}.",
+            "🔥 The Hype Beast": "Love the fit, but the bank account is screaming. Can we do £{p} and call it a day?"
+        }
+        
+        final_bid = round(bid) - 0.05
+        res = quotes[b_persona].format(p=f"{final_bid:.2f}")
+        st.success(f"**Your Move:** {res}")
+        st.code(res, language=None)
+
+st.divider()
+st.caption("v5.3 | Context-Aware Negotiation | No 'bruv' zone.")
