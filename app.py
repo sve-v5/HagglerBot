@@ -1,86 +1,106 @@
 import streamlit as st
 import random
 
-st.set_page_config(page_title="HagglerBot v5.3 | Negotiation Engine", page_icon="🎩")
+st.set_page_config(page_title="HagglerBot v5.5 | Professional UK", page_icon="🎩")
 
-# --- CONTEXT-AWARE RESPONSE ENGINE ---
-def get_seller_response(persona, current_offer, prev_offer, target_price):
-    # Dynamic logic for price improvement
-    is_improving = prev_offer is not None and current_offer > prev_offer
-    
-    responses = {
-        "⚖️ The Stoic": {
-            "standard": f"Logic dictates £{target_price:.2f}. Your offer is merely a suggestion.",
-            "improving": "I see we are starting to hit the ground running with reality. Still, we need to reach £{p}.",
-            "insult": "Entropy increases, but my patience for lowballs does not."
-        },
-        "🎭 The Absurdist": {
-            "standard": f"My pet lobster is unimpressed. He demands £{target_price:.2f}.",
-            "improving": "It's taking shape, even if slowly—like a glacier with a bank account. Let's aim for £{p}.",
-            "insult": "I would rather trade this for a single, very high-quality cloud."
-        },
-        "✨ Gen-Z Slay": {
-            "standard": f"Main character energy requires a main character price. £{target_price:.2f}?",
-            "improving": "Wait, this offer is actually starting to slay. We're getting on the right track! £{p}?",
-            "insult": "This offer is giving 'delusional era'. Major L."
-        }
+# --- INITIALIZE MEMORY (The 'Brain' of the Bot) ---
+if 'history' not in st.session_state:
+    st.session_state.history = []
+
+def reset_haggling():
+    st.session_state.history = []
+
+# --- PERSONA DATASETS ---
+PERSONAS = {
+    "SELLER": {
+        "🛡️ The Wall": {"floor": 0.90, "style": "Unyielding. Firm. Professional.", "round": "UP"},
+        "⚖️ The Stoic": {"floor": 0.80, "style": "Logical. Sarcastic. Detached.", "round": "MID"},
+        "🤝 The Merchant": {"floor": 0.70, "style": "Friendly. Flexible. Fair.", "round": "DOWN"},
+        "🎭 The Absurdist": {"floor": 0.85, "style": "Surreal. Bizarre. Philosophical.", "round": "MID"},
+        "✨ Gen-Z Slay": {"floor": 0.75, "style": "Sassy. Trendy. Honest.", "round": "TREND"}
+    },
+    "BUYER": {
+        "🧐 The Aristocrat": {"bid": 0.85, "style": "Polite. Prudent. High-end."},
+        "📉 The Analyst": {"bid": 0.75, "style": "Data-driven. Cold. Precise."},
+        "🔥 The Hype Beast": {"bid": 0.80, "style": "Direct. Cool. Budget-conscious."},
+        "🔨 The Lowballer": {"bid": 0.60, "style": "Aggressive. Audacious. Persistent."},
+        "🧘 The Zen Seeker": {"bid": 0.70, "style": "Patient. Minimalist. Calm."}
     }
-    
-    char = responses[persona]
-    if is_improving:
-        return char["improving"].format(p=f"{target_price:.2f}")
-    elif current_offer < (target_price * 0.7):
-        return char["insult"]
+}
+
+# --- TEXT ENGINE ---
+def generate_response(mode, persona, current_price, is_improvement, category):
+    # Context-based phrases
+    if is_improvement:
+        feedback = ["It's taking shape, even if slowly.", "We're getting on the right track.", "I see we're starting to hit the ground running with reality."]
     else:
-        return char["standard"]
+        feedback = ["Your offer is a fascinating exercise in optimism.", "My patience is a finite resource.", "Entropy increases, your offer does not."]
+
+    # Persona-specific flavor
+    quotes = {
+        "⚖️ The Stoic": f"{random.choice(feedback)} Logic dictates £{current_price:.2f} for this {category}.",
+        "🎭 The Absurdist": f"My pet lobster says that {category} is worth at least £{current_price:.2f}. Don't upset him.",
+        "🛡️ The Wall": f"Quality is worth the value. £{current_price:.2f} is the rock bottom for this {category}.",
+        "🤝 The Merchant": f"I appreciate the offer! How about we meet at £{current_price:.2f}?",
+        "✨ Gen-Z Slay": f"This {category} is literally main character energy. £{current_price:.2f} or it's a pass, bestie."
+    }
+    return quotes.get(persona, f"Let's aim for £{current_price:.2f}.")
 
 # --- UI ---
-st.title("🎩 HagglerBot v5.3")
+st.title("🎩 HagglerBot v5.5")
+st.sidebar.button("🔄 Reset Negotiation", on_click=reset_haggling)
 
-tab1, tab2 = st.tabs(["Selling Mode", "Buying Mode"])
+with st.sidebar:
+    mode = st.radio("Choose Role:", ["Selling", "Buying"])
+    category = st.selectbox("Category:", ["Clothes", "Electronics", "Books", "Other"])
+    persona_type = st.selectbox("Your Persona:", list(PERSONAS[mode.upper()].keys()))
+    base_price = st.number_input("Original Price (£):", min_value=1.0, value=50.0)
 
-with tab1:
-    st.header("Counter-Offer Engine")
-    col1, col2 = st.columns(2)
-    with col1:
-        listed_p = st.number_input("Listed Price (£):", value=50.0, key="s_listed")
-        prev_o = st.number_input("Previous Offer (£) (Optional):", value=0.0, key="s_prev")
-    with col2:
-        current_o = st.number_input("Current Offer (£):", value=30.0, key="s_curr")
-        s_persona = st.selectbox("Your Style:", ["⚖️ The Stoic", "🎭 The Absurdist", "✨ Gen-Z Slay"])
+# --- NEGOTIATION LOGIC ---
+st.subheader(f"{mode} Dashboard: {category}")
 
-    # Seller Logic: Floor is Listed - 20%
-    target = listed_p * 0.8
-    if st.button("Generate Response", key="s_btn"):
-        prev_val = prev_o if prev_o > 0 else None
-        reply = get_seller_response(s_persona, current_o, prev_val, target)
-        st.info(f"**Response:** {reply}")
+if mode == "Selling":
+    current_offer = st.number_input("Enter Buyer's Offer (£):", min_value=1.0, key="offer_input")
+    
+    if st.button("Analyze & Respond"):
+        # Check for improvement
+        is_imp = False
+        if st.session_state.history and current_offer > st.session_state.history[-1]:
+            is_imp = True
+        
+        st.session_state.history.append(current_offer)
+        
+        # Zeno/Floor Logic
+        target_price = base_price * PERSONAS["SELLER"][persona_type]["floor"]
+        
+        # Adjust target based on Zeno-style approach
+        if is_imp:
+            target_price = (target_price + current_offer) / 2 # Closing the gap
+        
+        reply = generate_response("SELLER", persona_type, target_price, is_imp, category)
+        
+        st.divider()
+        st.info(f"**{persona_type} Response:**\n\n{reply}")
         st.code(f"Look, {reply}", language=None)
 
-with tab2:
-    st.header("Strategic Buyer")
-    colA, colB = st.columns(2)
-    with colA:
-        item_p = st.number_input("Item Price (£):", value=100.0, key="b_price")
-        b_persona = st.selectbox("Buyer Persona:", ["🧐 The Reluctant Aristocrat", "📉 The Cold Analyst", "🔥 The Hype Beast"])
-    with colB:
-        category = st.selectbox("Category:", ["Luxury", "Tech", "Vintage", "Books"])
-
-    if st.button("Generate Opening Bid"):
-        # Buyer Logic: Bid starts at 70-80%
-        bid_map = {"🧐 The Reluctant Aristocrat": 0.85, "📉 The Cold Analyst": 0.75, "🔥 The Hype Beast": 0.80}
-        bid = item_p * bid_map[b_persona]
+else: # BUYING MODE
+    if st.button("Generate Opening Offer"):
+        config = PERSONAS["BUYER"][persona_type]
+        bid_price = base_price * config["bid"]
         
-        quotes = {
-            "🧐 The Reluctant Aristocrat": "In this economy, one must be prudent. Would you consider £{p} for this charming piece?",
-            "📉 The Cold Analyst": "Market data suggests an overvaluation. My algorithmic offer is £{p}.",
-            "🔥 The Hype Beast": "Love the fit, but the bank account is screaming. Can we do £{p} and call it a day?"
+        # Unique Buyer Quotes
+        buyer_quotes = {
+            "🧐 The Aristocrat": f"In this economy, one must be prudent. Would you consider £{bid_price:.2f} for this {category}?",
+            "📉 The Analyst": f"Market data for {category} suggests £{bid_price:.2f} is the optimal value.",
+            "🔨 The Lowballer": f"I've seen this {category} cheaper elsewhere. £{bid_price:.2f}, take it or leave it."
         }
         
-        final_bid = round(bid) - 0.05
-        res = quotes[b_persona].format(p=f"{final_bid:.2f}")
-        st.success(f"**Your Move:** {res}")
+        res = buyer_quotes.get(persona_type, f"How about £{bid_price:.2f} for the {category}?")
+        st.success(f"**Suggested Message:**\n\n{res}")
         st.code(res, language=None)
 
-st.divider()
-st.caption("v5.3 | Context-Aware Negotiation | No 'bruv' zone.")
+# --- HISTORY VISUAL ---
+if st.session_state.history:
+    st.write("---")
+    st.write("📈 **Negotiation Trend:**")
+    st.line_chart(st.session_state.history)
