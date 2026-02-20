@@ -1,111 +1,89 @@
 import streamlit as st
 import random
 
-# Alapbeállítások
-st.set_page_config(page_title="HagglerBot v5.7 | UK Vinted", page_icon="🎩")
+st.set_page_config(page_title="HagglerBot v5.8 | Deal Maker", page_icon="🤝")
 
-# --- MEMÓRIA KEZELÉSE (Session State) ---
-# Ez tárolja az alku történetét, hogy ne kelljen "Previous offer" mező
 if 'history' not in st.session_state:
     st.session_state.history = []
-if 'last_reply' not in st.session_state:
-    st.session_state.last_reply = ""
+if 'deal_closed' not in st.session_state:
+    st.session_state.deal_closed = False
 
-def reset_negotiation():
+def reset_bot():
     st.session_state.history = []
-    st.session_state.last_reply = ""
+    st.session_state.deal_closed = False
 
-# --- ADATBÁZIS (Personas & Logic) ---
+# --- PERSONA ENGINE ---
 PERSONAS = {
     "Seller": {
-        "🛡️ The Wall": {"floor": 0.90, "quote": "Quality is worth the value. Price is firm for this {cat}."},
-        "⚖️ The Stoic": {"floor": 0.80, "quote": "Logic dictates the value of this {cat}. £{p} is the floor."},
-        "🤝 The Merchant": {"floor": 0.70, "quote": "Let's find a middle ground for this {cat}. How about £{p}?"},
-        "🎭 The Absurdist": {"floor": 0.85, "quote": "My pet lobster says this {cat} is worth at least £{p}."},
-        "✨ Gen-Z Slay": {"floor": 0.75, "quote": "This {cat} is literally main character energy. £{p} or skip, bestie."}
-    },
-    "Buyer": {
-        "🧐 The Aristocrat": {"bid": 0.85},
-        "📉 The Analyst": {"bid": 0.75},
-        "🔨 The Lowballer": {"bid": 0.60},
-        "🔥 The Hype Beast": {"bid": 0.80},
-        "🧘 The Zen Seeker": {"bid": 0.70}
+        "🛡️ The Wall": {"floor": 0.95, "style": "Unyielding"},
+        "⚖️ The Stoic": {"floor": 0.80, "style": "Logical"},
+        "🤝 The Merchant": {"floor": 0.70, "style": "Flexible"},
+        "🎭 The Absurdist": {"floor": 0.85, "style": "Surreal"},
+        "✨ Gen-Z Slay": {"floor": 0.75, "style": "Trendy"}
     }
 }
 
-# --- OLDALSÁV (Sidebar) ---
+# --- SIDEBAR ---
 with st.sidebar:
-    st.header("Settings")
-    mode = st.radio("Are you Buying or Selling?", ["Selling", "Buying"])
+    st.header("Vinted UK Settings")
+    mode = st.radio("Mode:", ["Selling", "Buying"])
     category = st.selectbox("Category:", ["Clothes", "Electronics", "Books", "Other"])
-    
-    # Karakter választó a mód alapján
-    current_persona_list = list(PERSONAS["Seller"].keys()) if mode == "Selling" else list(PERSONAS["Buyer"].keys())
-    persona = st.selectbox("Your Style:", current_persona_list)
-    
-    original_price = st.number_input("Original Price (£):", min_value=1.0, value=50.0)
-    
-    if st.button("🔄 Reset Negotiation"):
-        reset_negotiation()
+    persona = st.selectbox("Style:", list(PERSONAS["Seller"].keys()))
+    list_price = st.number_input("Listed Price (£):", min_value=1.0, value=50.0)
+    st.button("🔄 New Negotiation", on_click=reset_bot)
 
-# --- FŐ INTERFÉSZ (Main UI) ---
-st.title(f"🎩 HagglerBot - {mode} Mode")
+# --- MAIN ---
+st.title(f"🤝 HagglerBot - {category}")
 
 if mode == "Selling":
-    st.subheader(f"Negotiating your {category}")
-    buyer_offer = st.number_input("Enter Buyer's Offer (£):", min_value=1.0, key="offer_input")
+    buyer_offer = st.number_input("Buyer's Offer (£):", min_value=1.0, step=1.0)
     
-    if st.button("Generate Counter-Offer"):
-        # Ellenőrizzük, hogy javult-e az ajánlat az előzőhöz képest
-        is_improving = False
-        if st.session_state.history and buyer_offer > st.session_state.history[-1]:
-            is_improving = True
-        
-        # Elmentjük az aktuális ajánlatot a történetbe
-        st.session_state.history.append(buyer_offer)
-        
-        # LOGIKA: Zeno-módszer (az eladó enged kicsit, ha a vevő javít)
+    if st.button("Respond to Offer") and not st.session_state.deal_closed:
         config = PERSONAS["Seller"][persona]
-        absolute_floor = original_price * config["floor"]
+        absolute_floor = list_price * config["floor"]
         
-        # Ha javul az ajánlat, az eladó is közelít (átlagolás), de nem megy a floor alá
-        if is_improving:
-            target_price = max(absolute_floor, (absolute_floor + buyer_offer) / 2)
-            feedback = random.choice([
-                "We are getting on the right track.",
-                "It's taking shape, even if slowly.",
-                "I see we are starting to hit the ground running with reality."
-            ])
+        # 1. CHECK FOR DEAL
+        if buyer_offer >= absolute_floor:
+            st.session_state.deal_closed = True
+            res = f"Acceptable. We have a deal at £{buyer_offer:.2f}! Send the offer on Vinted, and I'll ship your {category.lower()} ASAP. ✅"
+            st.balloons()
+        
+        # 2. GENERATE COUNTER-OFFER (Haggle)
         else:
-            target_price = absolute_floor
-            feedback = random.choice([
-                "Your offer is a fascinating exercise in optimism.",
-                "Entropy increases, but my patience does not.",
-                "Logic dictates we stay closer to the value."
-            ])
+            is_improving = len(st.session_state.history) > 0 and buyer_offer > st.session_state.history[-1]
+            st.session_state.history.append(buyer_offer)
             
-        final_p = round(target_price) - 0.05
-        base_quote = config["quote"].format(cat=category.lower(), p=f"{final_p:.2f}")
-        
-        st.session_state.last_reply = f"{feedback} {base_quote}"
+            # Zeno Method: meeting halfway
+            target = max(absolute_floor, (list_price + buyer_offer) / 2)
+            if persona == "🛡️ The Wall": target = max(absolute_floor, list_price * 0.98) # Wall barely moves
+            
+            final_p = round(target) - 0.05
+            
+            # Witty Responses
+            if is_improving:
+                msg = f"We are getting on the right track with this {category.lower()}."
+            else:
+                msg = f"Your offer for this {category.lower()} is an exercise in optimism."
+            
+            quotes = {
+                "🛡️ The Wall": f"I'm firm on quality. My best is £{final_p:.2f}.",
+                "⚖️ The Stoic": f"{msg} Logic dictates £{final_p:.2f}.",
+                "🎭 The Absurdist": f"My pet lobster is offended. He demands £{final_p:.2f}.",
+                "🤝 The Merchant": f"I appreciate the bump! Can we meet at £{final_p:.2f}?",
+                "✨ Gen-Z Slay": f"This {category.lower()} is too iconic for that. Best I can do is £{final_p:.2f}."
+            }
+            res = quotes[persona]
 
-    # Válasz megjelenítése
-    if st.session_state.last_reply:
+        st.session_state.last_res = res
+
+    if 'last_res' in st.session_state:
         st.divider()
-        st.info(f"**{persona} says:**\n\n{st.session_state.last_reply}")
-        st.code(f"Look, {st.session_state.last_reply}", language=None)
+        st.info(f"**{persona}:** {st.session_state.last_res}")
+        st.code(f"Look, {st.session_state.last_res}", language=None)
         
-        # Grafikon az alku menetéről
-        st.write("📈 **Price Trend:**")
-        st.line_chart(st.session_state.history)
+        if st.session_state.history:
+            st.write("📈 **Haggling Progress:**")
+            st.line_chart(st.session_state.history)
 
-else: # BUYING MODE
-    st.subheader(f"Bidding for {category}")
-    if st.button("Generate Opening Bid"):
-        config = PERSONAS["Buyer"][persona]
-        bid_value = (original_price * config["bid"]) - 0.05
-        
-        st.success(f"**Suggested Offer:** £{bid_value:.2f}")
-        st.code(f"Hi! Would you consider £{bid_value:.2f} for this {category.lower()}? I can pay immediately.", language=None)
-
-st.caption("v5.7 | Progressive Negotiation Logic | UK Market")
+else:
+    st.write("Buyer mode under construction for v5.9 - Focus on Seller Deal-Making now.")
