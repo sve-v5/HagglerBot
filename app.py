@@ -1,117 +1,87 @@
 import streamlit as st
 import pandas as pd
 import random
+import time
 
-# --- 1. KONFIGURÁCIÓ & STÍLUS ---
-st.set_page_config(page_title="HagglerBot Pro v5.1", layout="centered", page_icon="🤝")
-
-# Custom CSS a jobb megjelenésért
-st.markdown("""
-    <style>
-    .stMetric { background-color: rgba(240, 242, 246, 0.5); padding: 15px; border-radius: 10px; }
-    .stButton>button { width: 100%; border-radius: 20px; height: 3em; transition: 0.3s; }
-    .stButton>button:hover { transform: scale(1.02); }
-    </style>
-""", unsafe_allow_html=True)
+# --- 1. CONFIG & PERSONAS ---
+st.set_page_config(page_title="HagglerBot Pro v5.3", layout="centered", page_icon="🤖")
 
 PERSONAS = {
     "SELLER": {
-        "🛡️ The Wall": {"floor": 0.92, "round": "UP", "quote": "Nem zsibvásár, az ár fix. 🧱"},
-        "⚖️ The Stoic": {"floor": 0.80, "round": "MID", "quote": "A matek nem hazudik. ⏳"},
-        "🤝 The Merchant": {"floor": 0.70, "round": "DOWN", "quote": "Találjuk meg a közös utat! ✨"},
-        "✨ Gen-Z Slay": {"floor": 0.75, "round": "TREND", "quote": "Ez az ajánlat nem slay, tesó. 💅"}
-    },
-    "BUYER": {
-        "🔨 The Lowballer": {"bid": 0.60, "round": "DOWN", "quote": "Ennyim van rá, vagy hagyjuk. 📉"},
-        "📊 Value Hunter": {"bid": 0.75, "round": "MID", "quote": "Piaci ár alatt keresek. 🧐"},
-        "✨ Fair Player": {"bid": 0.85, "round": "UP", "quote": "Gyorsan fizetnék, ha engedsz kicsit. 🤝"},
-        "🔥 Hype Beast": {"bid": 0.70, "round": "TREND", "quote": "Nagyon élem a fitet, de szűkös a budget. 🔥"}
+        "🛡️ The Wall": {"floor": 0.92, "flex": 0.1, "quote": "Nem zsibvásár, az ár fix. 🧱"},
+        "⚖️ The Stoic": {"floor": 0.82, "flex": 0.3, "quote": "A matek nem hazudik. ⏳"},
+        "🤝 The Merchant": {"floor": 0.70, "flex": 0.6, "quote": "Találjuk meg a közös utat! ✨"}
     }
 }
 
-# --- 2. LOGIKA FINOMÍTÁSA ---
-def zeno_round(price, mode, round_type):
-    base = int(price)
-    if mode == "SELLER":
-        if round_type == "UP": return float(base) + 0.95
-        if round_type == "TREND": return float(base) + 0.00 # Kerek számok "tisztábbak"
-        return float(base) + 0.50
-    else: # BUYER
-        if round_type == "DOWN": return float(base) # Alacsony, kerek ajánlat
-        if round_type == "MID": return float(base) + 0.45
-        return float(base) + 0.95
-
-# Session State inicializálás az analitikához
+# --- 2. SESSION STATE ---
 if 'history' not in st.session_state:
     st.session_state.history = []
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+if "current_bot_price" not in st.session_state:
+    st.session_state.current_bot_price = 0
 
-# --- 3. UI LAYOUT ---
-mode_toggle = st.sidebar.radio("Üzemmód Kiválasztása:", ["💰 Eladó vagyok", "🛒 Vevő vagyok"])
-current_mode = "SELLER" if "Eladó" in mode_toggle else "BUYER"
-
-tab1, tab2, tab3 = st.tabs(["🎮 Dashboard", "📈 Analitika", "📖 Segédlet"])
+# --- 3. UI TABS ---
+tab1, tab2, tab3 = st.tabs(["🎮 Dashboard", "💬 Alku-szimulátor", "📊 Analitika"])
 
 with tab1:
-    st.title(f"{'🛡️' if current_mode == 'SELLER' else '🛒'} HagglerBot v5.1")
+    st.title("HagglerBot v5.3")
+    price_input = st.number_input("Termék ára (£):", value=20.0)
+    persona = st.selectbox("Karakter:", list(PERSONAS["SELLER"].keys()))
     
-    col1, col2 = st.columns([1, 1])
-    with col1:
-        persona = st.selectbox("Karakterstílus:", list(PERSONAS[current_mode].keys()))
-    with col2:
-        label = "Eredeti eladási ár (£):" if current_mode == "SELLER" else "Kikiáltási ár (£):"
-        price_input = st.number_input(label, value=20.0, step=1.0)
-
-    if st.button(f"🚀 {'Ellenajánlat' if current_mode == 'SELLER' else 'Első ajánlat'} számítása"):
-        config = PERSONAS[current_mode][persona]
-        
-        # Logika: Eladónál a floor alá nem megyünk, vevőnél a bid-ről indulunk
-        factor = config['floor'] if current_mode == "SELLER" else config['bid']
-        raw_price = price_input * factor
-        final_price = zeno_round(raw_price, current_mode, config['round'])
-        
-        # Eredmény megjelenítése
-        st.divider()
-        diff_pct = int((final_price / price_input - 1) * 100)
-        
-        c1, c2 = st.columns(2)
-        c1.metric("Javasolt ár", f"£{final_price:.2f}", f"{diff_pct}%")
-        c2.info(f"**Stílus:** {persona}\n\n*\"{config['quote']}\"*")
-        
-        # Copy-paste kész szöveg
-        copy_text = f"Legyen £{final_price:.2f}, {config['quote']}"
-        st.text_area("Másolható üzenet:", value=copy_text, height=70)
-        
-        # Mentés az analitikához
-        st.session_state.history.append({
-            "Idő": pd.Timestamp.now().strftime("%H:%M:%S"),
-            "Mód": current_mode,
-            "Ár": final_price,
-            "Eredeti": price_input
-        })
+    if st.button("Kalkuláció"):
+        res = price_input * PERSONAS["SELLER"][persona]["floor"]
+        st.metric("Javasolt ár", f"£{res:.2f}")
+        # Mentés az előzményekbe
+        st.session_state.history.append({"Idő": pd.Timestamp.now(), "Ár": res})
 
 with tab2:
-    st.subheader("Munkamenet statisztika")
-    if st.session_state.history:
-        df = pd.DataFrame(st.session_state.history)
-        st.dataframe(df, use_container_width=True)
+    st.subheader("Alku-szimulátor")
+    col_a, col_b = st.columns(2)
+    start_price = col_a.number_input("Kezdő ár:", value=100, key="sim_p")
+    bot_style = col_b.selectbox("Eladó stílusa:", list(PERSONAS["SELLER"].keys()), key="sim_s")
+    
+    if st.button("Szimuláció Reset"):
+        st.session_state.messages = []
+        st.session_state.current_bot_price = float(start_price)
+        st.session_state.target_p = start_price * PERSONAS["SELLER"][bot_style]["floor"]
+        st.session_state.messages.append({"role": "assistant", "content": f"Szia! £{start_price} az ára. Érdekel?"})
+        st.rerun()
+
+    for msg in st.session_state.messages:
+        with st.chat_message(msg["role"]): st.write(msg["content"])
+
+    if user_offer := st.chat_input("Ajánlatod..."):
+        st.session_state.messages.append({"role": "user", "content": f"Legyen £{user_offer}"})
+        offer_val = float(user_offer)
         
-        # Kis vizualizáció az árak alakulásáról
-        st.line_chart(df['Ár'])
-        
-        if st.button("Analitika törlése"):
-            st.session_state.history = []
-            st.rerun()
-    else:
-        st.write("Még nincs mentett kalkuláció.")
+        with st.chat_message("assistant"):
+            if offer_val >= st.session_state.current_bot_price:
+                resp = "✅ Elfogadom! Üzlet megköttetett."
+                st.balloons()
+                # --- ALKU JELENTÉS GENERÁLÁSA ---
+                savings = start_price - offer_val
+                perf = (savings / (start_price - st.session_state.target_p)) * 100 if start_price != st.session_state.target_p else 100
+                resp += f"\n\n📊 **ALKU JELENTÉS**\n- Megtakarítás: £{savings:.2f}\n- Hatékonyság: {min(int(perf), 100)}%"
+            elif offer_val < st.session_state.target_p * 0.8:
+                resp = f"Ez komolytalan. {PERSONAS['SELLER'][bot_style]['quote']}"
+            else:
+                flex = PERSONAS["SELLER"][bot_style]["flex"]
+                new_p = st.session_state.current_bot_price - (st.session_state.current_bot_price - offer_val) * flex
+                st.session_state.current_bot_price = max(new_p, st.session_state.target_p)
+                resp = f"Legyen £{st.session_state.current_bot_price:.2f} és viheted."
+            
+            st.write(resp)
+            st.session_state.messages.append({"role": "assistant", "content": resp})
 
 with tab3:
-    st.markdown("""
-    ### 💡 Tippek a profi alkudozáshoz
-    - **Pszichológiai árazás:** A `.95` végződés professzionális eladót sugall, a `.00` pedig határozottságot.
-    - **A Lowballer stratégia:** Mindig 60%-ról indulj, de számíts rá, hogy 75-80%-nál fogtok találkozni.
-    - **Vinted algoritmus:** A gyors válaszidő és a konkrét ajánlat gomb használata növeli az eladási esélyeket.
-    """)
-
-# --- LÁBLÉC ---
-st.sidebar.divider()
-st.sidebar.caption(f"Verzió: 5.1 | Mode: {current_mode}")
+    st.subheader("Statisztika")
+    if st.session_state.history:
+        df = pd.DataFrame(st.session_state.history)
+        st.dataframe(df)
+        # HIBAJAVÍTÁS: Csak akkor rajzolunk, ha van 'Ár' oszlop
+        if 'Ár' in df.columns:
+            st.line_chart(df['Ár'])
+    else:
+        st.info("Még nincs adat a grafikonhoz.")
